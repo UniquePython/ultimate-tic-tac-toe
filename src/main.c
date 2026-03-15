@@ -1,18 +1,24 @@
 #include "raylib.h"
+#include <stdbool.h>
 
-#define WIDTH  900
+#include "player.h"
+#include "board.h"
+
+#define WIDTH 900
 #define HEIGHT 600
 
-int main(void) {
-    InitWindow(WIDTH, HEIGHT, "ultimate-tic-tac-toe");
+int main(void)
+{
+    InitWindow(WIDTH, HEIGHT, "Ultimate Tic Tac Toe");
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose())
+    {
         // Update
-        
+
         // Draw
         BeginDrawing();
-            ClearBackground(BLACK);
+        ClearBackground(BLACK);
         EndDrawing();
     }
 
