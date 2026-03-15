@@ -97,8 +97,7 @@ void draw_marks(UltimateBoard *game)
                 int text_x = x + (CELL_WIDTH - text_w) / 2;
                 int text_y = y + (CELL_HEIGHT - MARK_FONT_SIZE) / 2;
 
-                DrawText(text, text_x, text_y, MARK_FONT_SIZE,
-                         board.cells[c] == X ? RED : BLUE);
+                DrawText(text, text_x, text_y, MARK_FONT_SIZE, board.cells[c] == X ? RED : BLUE);
             }
         }
     }
@@ -106,6 +105,9 @@ void draw_marks(UltimateBoard *game)
 
 void draw_active_board(UltimateBoard *game)
 {
+    if (!game)
+        return;
+
     if (game->next != NO_BOARD)
     {
         int bx = game->next % BOARD_DIM;
@@ -117,7 +119,28 @@ void draw_active_board(UltimateBoard *game)
             SUBBOARD_WIDTH,
             SUBBOARD_HEIGHT};
 
-        DrawRectangleLinesEx(r, GRID_THICK, YELLOW);
+        // DrawRectangleLinesEx(r, GRID_THICK, YELLOW);
+        DrawRectangleRec(r, Fade(YELLOW, 0.15f));
+    }
+    else
+    {
+        for (int b = 0; b < BOARD_CELLS; b++)
+        {
+            if (!board_playable(&game->locals[b]))
+                continue;
+
+            int bx = b % BOARD_DIM;
+            int by = b / BOARD_DIM;
+
+            Rectangle r = {
+                bx * SUBBOARD_WIDTH,
+                by * SUBBOARD_HEIGHT,
+                SUBBOARD_WIDTH,
+                SUBBOARD_HEIGHT};
+
+            // DrawRectangleLinesEx(r, GRID_THICK, YELLOW);
+            DrawRectangleRec(r, Fade(YELLOW, 0.15f));
+        }
     }
 }
 

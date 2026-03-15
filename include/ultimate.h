@@ -11,6 +11,7 @@ typedef struct
     Player curr;
 } UltimateBoard;
 
+void sync_curr(UltimateBoard *);
 bool init_ultimate(UltimateBoard *);
 Player ultimate_winner(UltimateBoard *);
 bool ultimate_full(UltimateBoard *);
