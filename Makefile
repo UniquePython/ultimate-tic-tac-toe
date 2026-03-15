@@ -7,7 +7,7 @@ BUILD_DIR = build
 
 SRCS   = $(wildcard $(SRC_DIR)/*.c)
 OBJS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
-TARGET = $(BUILD_DIR)/ultimate-tic-tac-toe
+TARGET = $(BUILD_DIR)/uttt
 
 .PHONY: all clean run
 
