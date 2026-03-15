@@ -2,21 +2,32 @@
 
 #include <stdio.h>
 
-bool save_exists(void)
+void get_save_path(const char *dir, int slot, char *out, int outlen)
 {
-    FILE *f = fopen(SAVE_PATH, "rb");
+    snprintf(out, outlen, "%s/save_%d.dat", dir, slot);
+}
+
+bool save_exists(const char *dir, int slot)
+{
+    char path[MAX_PATH_LEN];
+    get_save_path(dir, slot, path, sizeof(path));
+
+    FILE *f = fopen(path, "rb");
     if (!f)
         return false;
     fclose(f);
     return true;
 }
 
-bool save_game(const UltimateBoard *ub)
+bool save_game(const UltimateBoard *ub, const char *dir, int slot)
 {
     if (!ub)
         return false;
 
-    FILE *f = fopen(SAVE_PATH, "wb");
+    char path[MAX_PATH_LEN];
+    get_save_path(dir, slot, path, sizeof(path));
+
+    FILE *f = fopen(path, "wb");
     if (!f)
         return false;
 
@@ -25,12 +36,15 @@ bool save_game(const UltimateBoard *ub)
     return ok;
 }
 
-bool load_game(UltimateBoard *ub)
+bool load_game(UltimateBoard *ub, const char *dir, int slot)
 {
     if (!ub)
         return false;
 
-    FILE *f = fopen(SAVE_PATH, "rb");
+    char path[MAX_PATH_LEN];
+    get_save_path(dir, slot, path, sizeof(path));
+
+    FILE *f = fopen(path, "rb");
     if (!f)
         return false;
 
