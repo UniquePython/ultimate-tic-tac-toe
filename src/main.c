@@ -8,6 +8,7 @@
 #include "board.h"
 #include "ultimate.h"
 #include "save.h"
+#include "audio.h"
 
 #define WINDOW_WIDTH 900
 #define WINDOW_HEIGHT 900
@@ -161,22 +162,13 @@ static void update_menu(Screen *screen, UltimateBoard *game, const char *save_di
         int y = SLOT_Y0 + i * SLOT_STRIDE;
         bool exists = save_exists(save_dir, i);
 
-        Button load_btn = {
-            .rect = {SLOT_X, y, SLOT_W_LOAD, SLOT_H},
-            .label = "",
-            .disabled = !exists};
-        Button new_btn = {
-            .rect = {SLOT_X + SLOT_W_LOAD + SLOT_GAP, y, SLOT_W_NEW, SLOT_H},
-            .label = "",
-            .disabled = false};
+        Button load_btn = {.rect = {SLOT_X, y, SLOT_W_LOAD, SLOT_H}, .label = "", .disabled = !exists};
+        Button new_btn = {.rect = {SLOT_X + SLOT_W_LOAD + SLOT_GAP, y, SLOT_W_NEW, SLOT_H}, .label = "", .disabled = false};
 
-        if (button_clicked(load_btn))
+        if (button_clicked(load_btn) && load_game(game, save_dir, i))
         {
-            if (load_game(game, save_dir, i))
-            {
-                *current_slot = i;
-                *screen = SCREEN_PLAYING;
-            }
+            *current_slot = i;
+            *screen = SCREEN_PLAYING;
         }
 
         if (button_clicked(new_btn))
@@ -187,15 +179,12 @@ static void update_menu(Screen *screen, UltimateBoard *game, const char *save_di
         }
     }
 
-    Button settings_btn = centered_btn(MENU_SETTINGS_Y, 300, SLOT_H, "Settings", false);
-    Button quit_btn = centered_btn(MENU_QUIT_Y, 300, SLOT_H, "Quit", false);
-
-    if (button_clicked(settings_btn))
+    if (button_clicked(centered_btn(MENU_SETTINGS_Y, 300, SLOT_H, "Settings", false)))
     {
         ti_set(settings_input, save_dir);
         *screen = SCREEN_SETTINGS;
     }
-    if (button_clicked(quit_btn))
+    if (button_clicked(centered_btn(MENU_QUIT_Y, 300, SLOT_H, "Quit", false)))
         CloseWindow();
 }
 
@@ -215,14 +204,8 @@ static void draw_menu(const char *save_dir)
         char load_label[32];
         snprintf(load_label, sizeof(load_label), "Slot %d: %s", i + 1, exists ? "Resume" : "Empty");
 
-        Button load_btn = {
-            .rect = {SLOT_X, y, SLOT_W_LOAD, SLOT_H},
-            .label = load_label,
-            .disabled = !exists};
-        Button new_btn = {
-            .rect = {SLOT_X + SLOT_W_LOAD + SLOT_GAP, y, SLOT_W_NEW, SLOT_H},
-            .label = "New",
-            .disabled = false};
+        Button load_btn = {.rect = {SLOT_X, y, SLOT_W_LOAD, SLOT_H}, .label = load_label, .disabled = !exists};
+        Button new_btn = {.rect = {SLOT_X + SLOT_W_LOAD + SLOT_GAP, y, SLOT_W_NEW, SLOT_H}, .label = "New", .disabled = false};
 
         draw_button(load_btn);
         draw_button(new_btn);
@@ -238,16 +221,13 @@ static void update_settings(Screen *screen, char *save_dir, TextInput *ti)
 
     bool valid = dir_exists(ti->buf);
 
-    Button confirm = centered_btn(600, 300, SLOT_H, "Confirm", !valid);
-    Button back = centered_btn(676, 300, SLOT_H, "Back", false);
-
-    if (button_clicked(confirm))
+    if (button_clicked(centered_btn(600, 300, SLOT_H, "Confirm", !valid)))
     {
         strncpy(save_dir, ti->buf, MAX_PATH_LEN - 1);
         save_dir[MAX_PATH_LEN - 1] = '\0';
         *screen = SCREEN_MENU;
     }
-    if (button_clicked(back))
+    if (button_clicked(centered_btn(676, 300, SLOT_H, "Back", false)))
         *screen = SCREEN_MENU;
 }
 
@@ -263,20 +243,21 @@ static void draw_settings(TextInput *ti)
 
     bool valid = dir_exists(ti->buf);
     const char *status = valid ? "Directory found" : "Directory not found";
-    Color status_color = valid ? GREEN : RED;
-    DrawText(status, 200, 500, HINT_FONT_SIZE, status_color);
+    DrawText(status, 200, 500, HINT_FONT_SIZE, valid ? GREEN : RED);
 
     draw_button(centered_btn(600, 300, SLOT_H, "Confirm", !valid));
     draw_button(centered_btn(676, 300, SLOT_H, "Back", false));
 }
 
-static void handle_input(UltimateBoard *game, float *save_timer,
-                         const char *save_dir, int current_slot)
+static void handle_input(UltimateBoard *game, float *save_timer, const char *save_dir, int current_slot, GameAudio *audio)
 {
     if (IsKeyPressed(KEY_S))
     {
         if (save_game(game, save_dir, current_slot))
+        {
             *save_timer = SAVE_MSG_DURATION;
+            play_save(audio);
+        }
     }
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
@@ -289,7 +270,8 @@ static void handle_input(UltimateBoard *game, float *save_timer,
         int board_index = (row / BOARD_DIM) * BOARD_DIM + (col / BOARD_DIM);
         int cell_index = (row % BOARD_DIM) * BOARD_DIM + (col % BOARD_DIM);
 
-        ultimate_move(game, board_index, cell_index);
+        if (ultimate_move(game, board_index, cell_index))
+            play_mark(audio);
     }
 }
 
@@ -330,8 +312,7 @@ static void draw_marks(UltimateBoard *game)
                 DrawText(text,
                          x + (CELL_WIDTH - tw) / 2,
                          y + (CELL_HEIGHT - MARK_FONT_SIZE) / 2,
-                         MARK_FONT_SIZE,
-                         brd.cells[c] == X ? RED : BLUE);
+                         MARK_FONT_SIZE, brd.cells[c] == X ? RED : BLUE);
             }
         }
     }
@@ -383,16 +364,13 @@ static void draw_game(UltimateBoard *game, float save_timer)
     }
 }
 
-static void update_game_over(Screen *screen, UltimateBoard *game, int current_slot,
-                             const char *save_dir)
+static void update_game_over(Screen *screen, UltimateBoard *game,
+                             int current_slot, const char *save_dir)
 {
-    Button menu_btn = centered_btn(520, 300, SLOT_H, "Main Menu", false);
-    Button play_btn = centered_btn(596, 300, SLOT_H, "Play Again", false);
-
-    if (button_clicked(menu_btn))
+    if (button_clicked(centered_btn(520, 300, SLOT_H, "Main Menu", false)))
         *screen = SCREEN_MENU;
 
-    if (button_clicked(play_btn))
+    if (button_clicked(centered_btn(596, 300, SLOT_H, "Play Again", false)))
     {
         char path[MAX_PATH_LEN];
         get_save_path(save_dir, current_slot, path, sizeof(path));
@@ -427,6 +405,9 @@ int main(void)
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Ultimate Tic Tac Toe");
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
 
+    GameAudio audio;
+    init_audio(&audio);
+
     UltimateBoard game;
     init_ultimate(&game);
 
@@ -441,6 +422,8 @@ int main(void)
     {
         float dt = GetFrameTime();
 
+        update_audio(&audio);
+
         switch (screen)
         {
         case SCREEN_MENU:
@@ -454,7 +437,7 @@ int main(void)
         case SCREEN_PLAYING:
             if (save_timer > 0.0f)
                 save_timer -= dt;
-            handle_input(&game, &save_timer, save_dir, current_slot);
+            handle_input(&game, &save_timer, save_dir, current_slot, &audio);
             winner = ultimate_winner(&game);
             if (winner != NONE || ultimate_full(&game))
                 screen = SCREEN_GAME_OVER;
@@ -473,15 +456,12 @@ int main(void)
         case SCREEN_MENU:
             draw_menu(save_dir);
             break;
-
         case SCREEN_SETTINGS:
             draw_settings(&settings_input);
             break;
-
         case SCREEN_PLAYING:
             draw_game(&game, save_timer);
             break;
-
         case SCREEN_GAME_OVER:
             draw_game(&game, 0.0f);
             draw_game_over(winner);
@@ -491,6 +471,7 @@ int main(void)
         EndDrawing();
     }
 
+    close_audio(&audio);
     CloseWindow();
     return 0;
 }
