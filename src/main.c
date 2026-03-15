@@ -5,6 +5,7 @@
 #include "player.h"
 #include "board.h"
 #include "ultimate.h"
+#include "save.h"
 
 #define WINDOW_WIDTH 900
 #define WINDOW_HEIGHT 900
@@ -27,6 +28,12 @@
 #define OVERLAY_FONT_SIZE 80
 #define TITLE_FONT_SIZE 72
 #define BUTTON_FONT_SIZE 36
+#define HINT_FONT_SIZE 24
+
+// How long the "Saved!" confirmation stays on screen (in seconds)
+#define SAVE_MSG_DURATION 1.5f
+
+// ---- State ----
 
 typedef enum
 {
@@ -35,14 +42,19 @@ typedef enum
     SCREEN_GAME_OVER
 } Screen;
 
+// ---- Button ----
+
 typedef struct
 {
     Rectangle rect;
     const char *label;
+    bool disabled;
 } Button;
 
 static bool button_clicked(Button btn)
 {
+    if (btn.disabled)
+        return false;
     Vector2 mouse = GetMousePosition();
     bool hovered = CheckCollisionPointRec(mouse, btn.rect);
     return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
@@ -51,10 +63,14 @@ static bool button_clicked(Button btn)
 static void draw_button(Button btn)
 {
     Vector2 mouse = GetMousePosition();
-    bool hovered = CheckCollisionPointRec(mouse, btn.rect);
+    bool hovered = !btn.disabled && CheckCollisionPointRec(mouse, btn.rect);
 
-    Color fill = hovered ? Fade(WHITE, 0.2f) : Fade(WHITE, 0.08f);
-    Color border = hovered ? WHITE : GRAY;
+    Color fill = btn.disabled ? Fade(WHITE, 0.03f) : hovered ? Fade(WHITE, 0.2f)
+                                                             : Fade(WHITE, 0.08f);
+    Color border = btn.disabled ? Fade(GRAY, 0.3f) : hovered ? WHITE
+                                                             : GRAY;
+    Color text_c = btn.disabled ? Fade(GRAY, 0.4f) : hovered ? WHITE
+                                                             : LIGHTGRAY;
 
     DrawRectangleRec(btn.rect, fill);
     DrawRectangleLinesEx(btn.rect, 2, border);
@@ -63,26 +79,33 @@ static void draw_button(Button btn)
     int text_x = btn.rect.x + (btn.rect.width - text_w) / 2;
     int text_y = btn.rect.y + (btn.rect.height - BUTTON_FONT_SIZE) / 2;
 
-    DrawText(btn.label, text_x, text_y, BUTTON_FONT_SIZE, hovered ? WHITE : LIGHTGRAY);
+    DrawText(btn.label, text_x, text_y, BUTTON_FONT_SIZE, text_c);
 }
 
-static Button make_centered_button(int y, int w, int h, const char *label)
+static Button make_centered_button(int y, int w, int h, const char *label, bool disabled)
 {
     return (Button){
         .rect = {(WINDOW_WIDTH - w) / 2, y, w, h},
-        .label = label};
+        .label = label,
+        .disabled = disabled};
 }
+
+// ---- Menu ----
 
 static void update_menu(Screen *screen, UltimateBoard *game)
 {
-    Button play = make_centered_button(480, 300, 64, "Play");
-    Button quit = make_centered_button(570, 300, 64, "Quit");
+    Button play = make_centered_button(460, 300, 64, "New Game", false);
+    Button load = make_centered_button(550, 300, 64, "Load Game", !save_exists());
+    Button quit = make_centered_button(640, 300, 64, "Quit", false);
 
     if (button_clicked(play))
     {
         init_ultimate(game);
         *screen = SCREEN_PLAYING;
     }
+
+    if (button_clicked(load) && load_game(game))
+        *screen = SCREEN_PLAYING;
 
     if (button_clicked(quit))
         CloseWindow();
@@ -96,15 +119,25 @@ static void draw_menu(void)
     int title_w = MeasureText(title, TITLE_FONT_SIZE);
     int subtitle_w = MeasureText(subtitle, TITLE_FONT_SIZE);
 
-    DrawText(title, (WINDOW_WIDTH - title_w) / 2, 280, TITLE_FONT_SIZE, WHITE);
-    DrawText(subtitle, (WINDOW_WIDTH - subtitle_w) / 2, 365, TITLE_FONT_SIZE, GRAY);
+    DrawText(title, (WINDOW_WIDTH - title_w) / 2, 260, TITLE_FONT_SIZE, WHITE);
+    DrawText(subtitle, (WINDOW_WIDTH - subtitle_w) / 2, 345, TITLE_FONT_SIZE, GRAY);
 
-    draw_button(make_centered_button(480, 300, 64, "Play"));
-    draw_button(make_centered_button(570, 300, 64, "Quit"));
+    draw_button(make_centered_button(460, 300, 64, "New Game", false));
+    draw_button(make_centered_button(550, 300, 64, "Load Game", !save_exists()));
+    draw_button(make_centered_button(640, 300, 64, "Quit", false));
 }
 
-static void handle_input(UltimateBoard *game)
+// ---- Game ----
+
+static void handle_input(UltimateBoard *game, float *save_timer)
 {
+    // Save on S key
+    if (IsKeyPressed(KEY_S))
+    {
+        if (save_game(game))
+            *save_timer = SAVE_MSG_DURATION;
+    }
+
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
         Vector2 mouse = GetMousePosition();
@@ -169,11 +202,11 @@ static void draw_marks(UltimateBoard *game)
             if (text)
             {
                 int text_w = MeasureText(text, MARK_FONT_SIZE);
-
                 int text_x = x + (CELL_WIDTH - text_w) / 2;
                 int text_y = y + (CELL_HEIGHT - MARK_FONT_SIZE) / 2;
 
-                DrawText(text, text_x, text_y, MARK_FONT_SIZE, board.cells[c] == X ? RED : BLUE);
+                DrawText(text, text_x, text_y, MARK_FONT_SIZE,
+                         board.cells[c] == X ? RED : BLUE);
             }
         }
     }
@@ -189,12 +222,7 @@ static void draw_active_board(UltimateBoard *game)
         int bx = game->next % BOARD_DIM;
         int by = game->next / BOARD_DIM;
 
-        Rectangle r = {
-            bx * SUBBOARD_WIDTH,
-            by * SUBBOARD_HEIGHT,
-            SUBBOARD_WIDTH,
-            SUBBOARD_HEIGHT};
-
+        Rectangle r = {bx * SUBBOARD_WIDTH, by * SUBBOARD_HEIGHT, SUBBOARD_WIDTH, SUBBOARD_HEIGHT};
         DrawRectangleRec(r, Fade(YELLOW, 0.15f));
     }
     else
@@ -207,28 +235,39 @@ static void draw_active_board(UltimateBoard *game)
             int bx = b % BOARD_DIM;
             int by = b / BOARD_DIM;
 
-            Rectangle r = {
-                bx * SUBBOARD_WIDTH,
-                by * SUBBOARD_HEIGHT,
-                SUBBOARD_WIDTH,
-                SUBBOARD_HEIGHT};
-
+            Rectangle r = {bx * SUBBOARD_WIDTH, by * SUBBOARD_HEIGHT, SUBBOARD_WIDTH, SUBBOARD_HEIGHT};
             DrawRectangleRec(r, Fade(YELLOW, 0.15f));
         }
     }
 }
 
-static void draw_game(UltimateBoard *game)
+static void draw_game(UltimateBoard *game, float save_timer)
 {
     draw_active_board(game);
     draw_grid();
     draw_marks(game);
+
+    // S-key hint, bottom left
+    const char *hint = "S: Save";
+    DrawText(hint, 12, WINDOW_HEIGHT - HINT_FONT_SIZE - 8, HINT_FONT_SIZE, Fade(GRAY, 0.6f));
+
+    // "Saved!" confirmation fades out
+    if (save_timer > 0.0f)
+    {
+        float alpha = save_timer / SAVE_MSG_DURATION;
+        const char *msg = "Saved!";
+        int msg_w = MeasureText(msg, HINT_FONT_SIZE);
+        DrawText(msg, WINDOW_WIDTH - msg_w - 12, WINDOW_HEIGHT - HINT_FONT_SIZE - 8,
+                 HINT_FONT_SIZE, Fade(GREEN, alpha));
+    }
 }
+
+// ---- Game Over ----
 
 static void update_game_over(Screen *screen, UltimateBoard *game)
 {
-    Button menu_btn = make_centered_button(520, 300, 64, "Main Menu");
-    Button play_btn = make_centered_button(610, 300, 64, "Play Again");
+    Button menu_btn = make_centered_button(520, 300, 64, "Main Menu", false);
+    Button play_btn = make_centered_button(610, 300, 64, "Play Again", false);
 
     if (button_clicked(menu_btn))
         *screen = SCREEN_MENU;
@@ -250,11 +289,16 @@ static void draw_game_over(Player winner)
                                                          : WHITE;
 
     int result_w = MeasureText(result, OVERLAY_FONT_SIZE);
-    DrawText(result, (WINDOW_WIDTH - result_w) / 2, WINDOW_HEIGHT / 2 - OVERLAY_FONT_SIZE - 40, OVERLAY_FONT_SIZE, result_color);
+    DrawText(result,
+             (WINDOW_WIDTH - result_w) / 2,
+             WINDOW_HEIGHT / 2 - OVERLAY_FONT_SIZE - 40,
+             OVERLAY_FONT_SIZE, result_color);
 
-    draw_button(make_centered_button(520, 300, 64, "Main Menu"));
-    draw_button(make_centered_button(610, 300, 64, "Play Again"));
+    draw_button(make_centered_button(520, 300, 64, "Main Menu", false));
+    draw_button(make_centered_button(610, 300, 64, "Play Again", false));
 }
+
+// ---- Main ----
 
 int main(void)
 {
@@ -266,9 +310,12 @@ int main(void)
 
     Screen screen = SCREEN_MENU;
     Player winner = NONE;
+    float save_timer = 0.0f;
 
     while (!WindowShouldClose())
     {
+        float dt = GetFrameTime();
+
         switch (screen)
         {
         case SCREEN_MENU:
@@ -276,7 +323,11 @@ int main(void)
             break;
 
         case SCREEN_PLAYING:
-            handle_input(&game);
+            if (save_timer > 0.0f)
+                save_timer -= dt;
+
+            handle_input(&game, &save_timer);
+
             winner = ultimate_winner(&game);
             if (winner != NONE || ultimate_full(&game))
                 screen = SCREEN_GAME_OVER;
@@ -297,11 +348,11 @@ int main(void)
             break;
 
         case SCREEN_PLAYING:
-            draw_game(&game);
+            draw_game(&game, save_timer);
             break;
 
         case SCREEN_GAME_OVER:
-            draw_game(&game);
+            draw_game(&game, 0.0f);
             draw_game_over(winner);
             break;
         }
