@@ -24,8 +24,8 @@
 #define GRID_THIN 1
 
 #define MARK_FONT_SIZE 100
-
-#define NO_BOARD (-1)
+#define OVERLAY_FONT_SIZE 80
+#define HINT_FONT_SIZE 30
 
 void handle_input(UltimateBoard *game)
 {
@@ -119,7 +119,6 @@ void draw_active_board(UltimateBoard *game)
             SUBBOARD_WIDTH,
             SUBBOARD_HEIGHT};
 
-        // DrawRectangleLinesEx(r, GRID_THICK, YELLOW);
         DrawRectangleRec(r, Fade(YELLOW, 0.15f));
     }
     else
@@ -138,17 +137,36 @@ void draw_active_board(UltimateBoard *game)
                 SUBBOARD_WIDTH,
                 SUBBOARD_HEIGHT};
 
-            // DrawRectangleLinesEx(r, GRID_THICK, YELLOW);
             DrawRectangleRec(r, Fade(YELLOW, 0.15f));
         }
     }
 }
 
-void draw(UltimateBoard *game)
+void draw_game_over(Player winner)
 {
+    DrawRectangle(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, Fade(BLACK, 0.65f));
+
+    const char *result = winner == X ? "X Wins!" : winner == O ? "O Wins!"
+                                                               : "Draw!";
+    Color result_color = winner == X ? RED : winner == O ? BLUE
+                                                         : WHITE;
+
+    int result_w = MeasureText(result, OVERLAY_FONT_SIZE);
+    DrawText(result, (WINDOW_WIDTH - result_w) / 2, WINDOW_HEIGHT / 2 - OVERLAY_FONT_SIZE, OVERLAY_FONT_SIZE, result_color);
+
+    const char *hint = "Press R to restart";
+    int hint_w = MeasureText(hint, HINT_FONT_SIZE);
+    DrawText(hint, (WINDOW_WIDTH - hint_w) / 2, WINDOW_HEIGHT / 2 + HINT_FONT_SIZE, HINT_FONT_SIZE, LIGHTGRAY);
+}
+
+void draw(UltimateBoard *game, Player winner, bool game_over)
+{
+    draw_active_board(game);
     draw_grid();
     draw_marks(game);
-    draw_active_board(game);
+
+    if (game_over)
+        draw_game_over(winner);
 }
 
 int main(void)
@@ -159,13 +177,32 @@ int main(void)
     UltimateBoard game;
     init_ultimate(&game);
 
+    Player winner = NONE;
+    bool game_over = false;
+
     while (!WindowShouldClose())
     {
-        handle_input(&game);
+        if (game_over)
+        {
+            if (IsKeyPressed(KEY_R))
+            {
+                init_ultimate(&game);
+                winner = NONE;
+                game_over = false;
+            }
+        }
+        else
+        {
+            handle_input(&game);
+
+            winner = ultimate_winner(&game);
+            if (winner != NONE || ultimate_full(&game))
+                game_over = true;
+        }
 
         BeginDrawing();
         ClearBackground(BLACK);
-        draw(&game);
+        draw(&game, winner, game_over);
         EndDrawing();
     }
 

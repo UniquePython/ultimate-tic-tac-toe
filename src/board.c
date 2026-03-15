@@ -8,7 +8,6 @@ bool init_board(Board *board)
     for (int i = 0; i < 9; i++)
         board->cells[i] = NONE;
 
-    board->curr = X;
     board->winner = NONE;
 
     return true;
@@ -52,15 +51,6 @@ void check_win(Board *board)
     board->winner = NONE;
 }
 
-void get_occupancy(Board *board, bool *vacant)
-{
-    if (!board || !vacant)
-        return;
-
-    for (int i = 0; i < 9; i++)
-        vacant[i] = board->cells[i] == NONE;
-}
-
 bool board_playable(Board *b)
 {
     if (!b)
@@ -72,7 +62,7 @@ bool board_playable(Board *b)
     return !board_full(b);
 }
 
-bool make_move(Board *board, int cell)
+bool make_move(Board *board, int cell, Player curr)
 {
     if (!board || cell < 0 || cell > 8)
         return false;
@@ -83,12 +73,9 @@ bool make_move(Board *board, int cell)
     if (board->cells[cell] != NONE)
         return false;
 
-    board->cells[cell] = board->curr;
+    board->cells[cell] = curr;
 
     check_win(board);
-
-    if (board->winner == NONE)
-        board->curr = board->curr == X ? O : X;
 
     return true;
 }

@@ -1,11 +1,5 @@
 #include "ultimate.h"
 
-void sync_curr(UltimateBoard *u)
-{
-    for (int i = 0; i < 9; i++)
-        u->locals[i].curr = u->curr;
-}
-
 bool init_ultimate(UltimateBoard *ub)
 {
     if (!ub)
@@ -14,10 +8,8 @@ bool init_ultimate(UltimateBoard *ub)
     for (int i = 0; i < 9; i++)
         init_board(&ub->locals[i]);
 
-    ub->next = -1;
+    ub->next = NO_BOARD;
     ub->curr = X;
-
-    sync_curr(ub);
 
     return true;
 }
@@ -70,7 +62,7 @@ bool ultimate_move(UltimateBoard *ub, int board_index, int cell)
     if (cell < 0 || cell > 8)
         return false;
 
-    if (ub->next != -1 && board_index != ub->next)
+    if (ub->next != NO_BOARD && board_index != ub->next)
         return false;
 
     Board *b = &ub->locals[board_index];
@@ -78,18 +70,15 @@ bool ultimate_move(UltimateBoard *ub, int board_index, int cell)
     if (!board_playable(b))
         return false;
 
-    if (!make_move(b, cell))
+    if (!make_move(b, cell, ub->curr))
         return false;
-
-    check_win(b);
 
     if (board_playable(&ub->locals[cell]))
         ub->next = cell;
     else
-        ub->next = -1;
+        ub->next = NO_BOARD;
 
     ub->curr = ub->curr == X ? O : X;
-    sync_curr(ub);
 
     return true;
 }
